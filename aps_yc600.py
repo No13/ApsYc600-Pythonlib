@@ -19,10 +19,6 @@ class ApsYc600:
 
     # identification for this ECU / controller
     controller_id = ""
-    inv_commands = {
-        'ping': '002101',
-        'checkCoordinator': '002700',
-        'startCoordinator': '002600'}
 
     # Serial handles
     reader = None
@@ -100,15 +96,16 @@ class ApsYc600:
         '''
         Send cmd
         '''
-        # To be implemented: Listen before talk?
+        # All commands are prefixed with 0xFE
         prefix_cmd = 'FE'
         # Length of message is total length / 2 minus cmd (2 bytes) (and strip '0x')
         cmdlen = hex(int(len(cmd) / 2) - 2)[2:]
-        # Pad to 2 bytes
+        # Pad length to 2 bytes
         if len(cmdlen) == 1:
             cmdlen = '0'+str(cmdlen)
+        # Assemble and add CRC
         cmd = prefix_cmd + cmdlen  + cmd + str(self.__crc(cmdlen+cmd))[2:]
-        # print('sending', cmd)
+        # Send each set of two characters as byte
         for i in range(0, len(cmd), 2):
             new_char = int('0x'+cmd[i]+cmd[i+1], 0).to_bytes(1, 'big')
             self.writer.write(new_char)
@@ -117,6 +114,8 @@ class ApsYc600:
         '''
         Listen for serial output
         When serial buffer is empty after timeout, return ''
+
+        When reader has no in_waiting function assume read() is non-blocking.
         '''
         out_str = ""
         # micropython has no float for time...
@@ -135,16 +134,20 @@ class ApsYc600:
         else:
             # micropython seems to be slow;
             time.sleep(0.5)
+            # Read current buffer
             buffer = self.reader.read()
+            # While buffer is empty, retry until buffer is not, or timeout expires
             while (buffer is None) and ((time.time_ns() // 1000000) < end_time_ms):
                 time.sleep(0.1)
                 buffer = self.reader.read()
+            # After first characters are received, wait short time and read the rest.
             time.sleep(0.2)
             temp_str = b""
             while buffer is not None:
                 temp_str += buffer
                 time.sleep(0.1)
                 buffer = self.reader.read()
+            # Convert binary string to hex-string
             for i in temp_str:
                 temp_char = hex(i)[2:]
                 if len(temp_char) == 1:
@@ -174,12 +177,17 @@ class ApsYc600:
             '6605': 'ZB_WR_CONF_Resp',
             '6700': 'StartCoordinatorResp'}
 
+        # Replace code with string when available
         cmd_code = in_str[4:8]
         if cmd_code in known_cmds:
             cmd_code = known_cmds.get(cmd_code)
+
         data = in_str[8:-2]
+
+        # Check CRC
         crc = self.__crc_check(in_str)
 
+        # If message type is AF_INCOMING_MSG assume poll response
         if cmd_code == 'AF_INCOMING_MSG' and crc:
             data = self.__decode_inverter_values(in_str)
         return {'cmd': cmd_code, 'crc': crc, 'data': data}
@@ -187,10 +195,12 @@ class ApsYc600:
     @staticmethod
     def __decode_inverter_values(in_str):
         '''
-        Transform byte string to values
+        Transform byte string of poll response to values
         called by: __decode
         '''
+        # We do not need the first 38 bytes apparently
         data = in_str[38:]
+
         invtemp = -258.7 + (int('0x' + data[24:28], 0) * 0.2752) # Inverter temperature
         freq_ac = 50000000 / int('0x' + data[28:34], 0) # AC Fequency
         # DC Current for panel 1
@@ -226,7 +236,7 @@ class ApsYc600:
             str_len = int('0x'+in_str[2:4], 0) # Decode cmd len
             min_len = int((len(in_str) - 10) / 2) # FE XX XXXX ... XX
             if str_len > min_len: # Check if data is sufficient for found str_len
-                raise Exception('Data corrupt')
+                raise Exception('Data corrupt, length field does not match actual length')
             cmd = in_str[:(10 + str_len * 2)] # Copy command to str
             in_str = in_str[10 + (str_len * 2):]
             decoded_cmd.append(self.__decode(cmd))
@@ -236,7 +246,10 @@ class ApsYc600:
 
     def add_inverter(self, inv_serial, inv_id, num_panels):
         '''
-        Add inverter to struct, inv_id is required for polling
+        Add inverter to struct,
+            inv_id is required for polling
+            serial is required for pairing
+            panels is required to determine inverter type (YC600 / QS1)
         '''
         inverter = {
             'serial': inv_serial,
@@ -258,18 +271,20 @@ class ApsYc600:
             'FBFB06BB000000000000C1FEFE')
         time.sleep(1)
         return_str = self.__listen()
-        ## If string contains: fe034480cd14011f: 0xCD = NoRoute: pairing not complete
-        if 'fe034480cd14011f' in return_str:
-            raise Exception("Not paired")
         response_data = self.__parse(return_str)
-        return response_data
+        # Check if correct response is found...
+        for response in response_data:
+            if response['cmd'] == '4480' and 'CD' in response['data']:
+                return {'error': 'NoRoute'}
+            if response['cmd'] == 'AF_INCOMING_MSG':
+                return response
+        return {'error': 'timeout', 'data': return_str}
 
     def ping_radio(self):
         '''
         Check if radio module is ok
         '''
         self.__send_cmd('2101')
-        # To be implemented: response check and/or re-init radio
         str_resp = self.__listen()
         if str_resp is None:
             print("Ping reply empty")
@@ -340,12 +355,11 @@ class ApsYc600:
         for cmd in init_cmd:
             self.__send_cmd(cmd)
             result_str = self.__listen(1100)
-            print('Sent:', cmd, 'Received:', result_str)
             cmd_index = init_cmd.index(cmd)
             try:
                 if not expect_response[cmd_index][0] in result_str:
                     all_verified = False
-                    print('Verify failed')
+                    print('Verify failed',cmd,result_str)
             finally:
                 pass
 
