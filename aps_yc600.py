@@ -119,9 +119,10 @@ class ApsYc600:
         When serial buffer is empty after timeout, return ''
         '''
         out_str = ""
-        end_time = time.time() + (timeout / 1000)
+        # micropython has no float for time...
+        end_time_ms = (time.time_ns() // 1000000) + timeout
         if self.system_type == 'python3-serial':
-            while (self.reader.in_waiting == 0) and (time.time() < end_time):
+            while (self.reader.in_waiting == 0) and ((time.time() * 1000) < end_time_ms):
                 time.sleep(0.01)
             time.sleep(0.1)
             # Only read characters when serial buffer is not empty
@@ -132,14 +133,17 @@ class ApsYc600:
                     hex_char = '0'+hex_char
                 out_str += hex_char
         else:
+            # micropython seems to be slow;
+            time.sleep(0.5)
             buffer = self.reader.read()
-            while (buffer is None) and (time.time() < end_time):
-                time.sleep(0.01)
+            while (buffer is None) and ((time.time_ns() // 1000000) < end_time_ms):
+                time.sleep(0.1)
                 buffer = self.reader.read()
-            time.sleep(0.1)
+            time.sleep(0.2)
             temp_str = b""
             while buffer is not None:
                 temp_str += buffer
+                time.sleep(0.1)
                 buffer = self.reader.read()
             for i in temp_str:
                 temp_char = hex(i)[2:]
@@ -245,6 +249,7 @@ class ApsYc600:
         '''
         Get values from inverter
         '''
+        self.clear_buffer()
         if inverter_index > len(self.inv_data) -1:
             raise Exception('Invalid inverter')
         self.__send_cmd(
