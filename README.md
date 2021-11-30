@@ -1,6 +1,21 @@
 # Intro
+This is my attempt at creating a Python library for interfacing with my APSystems YC600 inverter.
+My work is based on the cc2531/cc2530 firmware created by Kadzsol (https://github.com/Koenkk/zigbee2mqtt/files/6797510/discord-11-7-2021.zip / https://github.com/Koenkk/zigbee2mqtt/issues/4221) and the ESP12 firmware created by patience4711 (https://github.com/patience4711/read-APS-inverters-YC600-QS1)
+
+# About the cc253x firmware
+As stated above, the cc253x firmware is created by Kadzsol. 
+Flashing the custom firmware is mandatory to be able to communicate with APS inverters.
+After flashing your module it will not be zigbee compatible until you reflash with the original firmware.
+
+The author states that: 
+ - use of this firmware for any commercial puposes is *not* allowed
+ - Use at your own risk
+
+The reason I include the firmware is specifically to have a single bundle of all required files to be able to use this library 
 
 # Preparing a cc2531/cc2530
+Flash using: https://github.com/jmichault/flash_cc2531
+More information to follow...
 
 # Using a Raspberry PI
     import time
