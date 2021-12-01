@@ -187,10 +187,26 @@ class ApsYc600:
         # Check CRC
         crc = self.__crc_check(in_str)
 
-        # If message type is AF_INCOMING_MSG assume poll response
         if cmd_code == 'AF_INCOMING_MSG' and crc:
-            data = self.__decode_inverter_values(in_str)
+            # Can be answer to poll request or pair request
+            pair = False
+            if len(in_str) < 222:
+                for inverter in self.inv_data:
+                    if inverter['serial'] in in_str:
+                        # Decode pair request
+                        data = self.__decode_pair_response(in_str)
+                        pair = True
+                        break
+            if not pair:
+                data = self.__decode_inverter_values(in_str)
         return {'cmd': cmd_code, 'crc': crc, 'data': data}
+
+    @staticmethod
+    def __decode_pair_response(in_str):
+        '''
+        Retrieve inverter ID from response
+        '''
+        return in_str
 
     @staticmethod
     def __decode_inverter_values(in_str):
@@ -222,7 +238,9 @@ class ApsYc600:
             'voltage_dc2': round(voltdc2, 2),
             'voltage_ac': round(volt_ac, 2),
             'energy_panel1': round(en_pan1, 3),
-            'energy_panel2': round(en_pan2, 3)}
+            'energy_panel2': round(en_pan2, 3),
+            'watt_panel1': round(currdc1 * voltdc1, 2),
+            'watt_panel2': round(currdc2 * voltdc2, 2)}
 
     def __parse(self, in_str):
         '''
@@ -278,7 +296,7 @@ class ApsYc600:
                 return {'error': 'NoRoute'}
             if response['cmd'] == 'AF_INCOMING_MSG':
                 return response
-        return {'error': 'timeout', 'data': return_str}
+        return {'error': 'timeout', 'data': response_data}
 
     def ping_radio(self):
         '''
@@ -298,7 +316,7 @@ class ApsYc600:
         return False
 
     # pylint: disable=R0915
-    def start_coordinator(self, pair_mode=False, pair_inverter_index=0):
+    def start_coordinator(self, pair_mode=False):
         '''
         Start coordinator proces in Zigbee radio.
         Resets modem
@@ -333,24 +351,7 @@ class ApsYc600:
                  'fe0145c0088c',
                  'fe0145c0088c',
                  'fe0145c0098d'])
-        else:
-            inverter_serial = self.inv_data[pair_inverter_index]['serial']
-            pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140D0200000F1100"
-            pair_cmd += inverter_serial
-            pair_cmd += "FFFF10FFFF"
-            pair_cmd += self.__reverse_byte_str(self.controller_id)
-            init_cmd.append(pair_cmd)
-            pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140C0201000F0600"
-            pair_cmd += inverter_serial
-            init_cmd.append(pair_cmd)
-            pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140F0102000F1100"
-            pair_cmd += inverter_serial
-            pair_cmd += self.__reverse_byte_str(self.controller_id)[-4:]
-            pair_cmd += "10FFFF" + self.__reverse_byte_str(self.controller_id)
-            init_cmd.append(pair_cmd)
-            pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF14010103000F0600"
-            pair_cmd += self.__reverse_byte_str(self.controller_id)
-            init_cmd.append(pair_cmd)
+
         all_verified = True
         for cmd in init_cmd:
             self.__send_cmd(cmd)
@@ -362,15 +363,9 @@ class ApsYc600:
                     print('Verify failed',cmd,result_str)
             finally:
                 pass
-
             # Final commands need more time to process
             if init_cmd.index(cmd) > 6:
                 time.sleep(1.5)
-        if pair_mode:
-            # To be implemented: Decode pair response
-            while inverter_serial in result_str:
-                result_str = result_str[
-                    result_str.index(inverter_serial) + len(inverter_serial)]
         return all_verified
 
     def check_coordinator(self):
@@ -392,7 +387,43 @@ class ApsYc600:
         '''
         Pair with inverter at index inv_index
         '''
-        ## To be implemented
         if inverter_index > len(self.inv_data) -1:
             raise Exception('Invalid inverter')
+        self.start_coordinator(True)
+        init_cmd =[]
+        inverter_serial = self.inv_data[inverter_index]['serial']
+        pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140D0200000F1100"
+        pair_cmd += inverter_serial
+        pair_cmd += "FFFF10FFFF"
+        pair_cmd += self.__reverse_byte_str(self.controller_id)
+        init_cmd.append(pair_cmd)
+        pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140C0201000F0600"
+        pair_cmd += inverter_serial
+        init_cmd.append(pair_cmd)
+        pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140F0102000F1100"
+        pair_cmd += inverter_serial
+        pair_cmd += self.__reverse_byte_str(self.controller_id)[-4:]
+        pair_cmd += "10FFFF" + self.__reverse_byte_str(self.controller_id)
+        init_cmd.append(pair_cmd)
+        pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF14010103000F0600"
+        pair_cmd += self.__reverse_byte_str(self.controller_id)
+        init_cmd.append(pair_cmd)
+
+        for cmd in init_cmd:
+            self.__send_cmd(cmd)
+            result_str = self.__listen(1100)
+            #cmd_index = init_cmd.index(cmd)
+            #try:
+            #    if not expect_response[cmd_index][0] in result_str:
+            #        all_verified = False
+            #        print('Verify failed',cmd,result_str)
+            #finally:
+            #    pass
+            time.sleep(1.5)
+            result = self.__parse(result_str)
+            print(result)
+
+        while inverter_serial in result_str:
+            result_str = result_str[
+                result_str.index(inverter_serial) + len(inverter_serial)]
         return False
