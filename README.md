@@ -25,6 +25,7 @@ RPI Pin   Name    CC2530 Pin   Name
   38     GPIO20        5       P2_1 (DD)
   36     GPIO16        4       P2_2 (DC)
   35     GPIO19       17      Reset
+  01       VCC        16        VCC
 ```
 Check if chip is recognised:
 ```
