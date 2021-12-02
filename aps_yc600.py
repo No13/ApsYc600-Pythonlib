@@ -193,21 +193,15 @@ class ApsYc600:
             if len(in_str) < 222:
                 for inverter in self.inv_data:
                     if inverter['serial'] in in_str:
-                        # Decode pair request
-                        data = self.__decode_pair_response(in_str)
+                        # Decode pair request is done in pair_inverter function
+                        data = in_str
                         pair = True
                         break
             else:
                 if not pair:
+                    # Decode inverter poll response
                     data = self.__decode_inverter_values(in_str)
         return {'cmd': cmd_code, 'crc': crc, 'data': data}
-
-    @staticmethod
-    def __decode_pair_response(in_str):
-        '''
-        Retrieve inverter ID from response
-        '''
-        return in_str
 
     @staticmethod
     def __decode_inverter_values(in_str):
@@ -276,6 +270,15 @@ class ApsYc600:
             'panels': num_panels}
         self.inv_data.append(inverter)
         return len(self.inv_data) -1 # Return index for last inverter
+
+    def set_inverter_id(self, inv_index, inv_id):
+        '''
+        Set inverter ID for existing inverter
+        '''
+        if len(self.inv_data) <= inv_index:
+            raise Exception('Invalid inverter index')
+        self.inv_data[inv_index]['inv_id'] = inv_id
+        return True
 
     def poll_inverter(self, inverter_index):
         '''
