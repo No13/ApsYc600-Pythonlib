@@ -16,6 +16,8 @@ The reason I include the firmware is specifically to have a single bundle of all
 # Preparing a cc2531/cc2530
 Flash using: https://github.com/jmichault/flash_cc2531
 
+![](https://github.com/No13/ApsYc600-Pythonlib/blob/master/cc2530.jpg?raw=true)
+
 Connect the CC2530 module to a Raspberry Pi:
 ```
 RPI Pin   Name    CC2530 Pin   Name
