@@ -8,14 +8,44 @@ Flashing the custom firmware is mandatory to be able to communicate with APS inv
 After flashing your module it will not be zigbee compatible until you reflash with the original firmware.
 
 The author states that: 
- - use of this firmware for any commercial puposes is *not* allowed
+ - use of this firmware for any commercial purposes is *not* allowed
  - Use at your own risk
 
 The reason I include the firmware is specifically to have a single bundle of all required files to be able to use this library 
 
 # Preparing a cc2531/cc2530
 Flash using: https://github.com/jmichault/flash_cc2531
-More information to follow...
+
+Connect the CC2530 module to a Raspberry Pi:
+    RPI Pin   Name    CC2530 Pin   Name
+      39       GND        15        GND
+      38     GPIO20        5       P2_1 (DD)
+      36     GPIO16        4       P2_2 (DC)
+      35     GPIO19       17      Reset
+
+Check if chip is recognised:
+    ./cc_chipid
+
+Backup current firmware:
+    ./cc_read backup.hex
+
+Write custom firmware for APS connectivity:
+    ./cc_write CC2530ZNP-cc2591-with-SBL.hex
+
+Flashing is done using DD and DC Pin. After flashing the TX and RX pins for communication with ESP32 and/or
+Raspberry PI at the cc2530 module are:
+    CC2530 Pin    Name
+        21        P0_2 (RX)
+        22        P0_3 (TX)
+
+Communication with the cc2530 module is done using serial communication at
+115200 baud.
+   
+# Pairing an Inverter
+Before an inverter is usable it needs to be paired. After the pairing process you will get the inverter ID.
+This ID is needed to communicate with the inverter.
+Using a 'clean' CC2530 module without pairing (when inverter ID is already known) does not seem to work.
+When paired once, the inverter ID should suffice for further communication.
 
 # Using a Raspberry PI
     import time
