@@ -197,8 +197,9 @@ class ApsYc600:
                         data = self.__decode_pair_response(in_str)
                         pair = True
                         break
-            if not pair:
-                data = self.__decode_inverter_values(in_str)
+            else:
+                if not pair:
+                    data = self.__decode_inverter_values(in_str)
         return {'cmd': cmd_code, 'crc': crc, 'data': data}
 
     @staticmethod
@@ -267,7 +268,7 @@ class ApsYc600:
         Add inverter to struct,
             inv_id is required for polling
             serial is required for pairing
-            panels is required to determine inverter type (YC600 / QS1)
+            num_panels is required to determine inverter type (YC600 / QS1)
         '''
         inverter = {
             'serial': inv_serial,
@@ -283,11 +284,13 @@ class ApsYc600:
         self.clear_buffer()
         if inverter_index > len(self.inv_data) -1:
             raise Exception('Invalid inverter')
+        # Send poll request
         self.__send_cmd(
             '2401'+self.__reverse_byte_str(self.inv_data[inverter_index]['inv_id'])+
             '1414060001000F13'+self.__reverse_byte_str(self.controller_id)+
             'FBFB06BB000000000000C1FEFE')
         time.sleep(1)
+        # Check poll response
         return_str = self.__listen()
         response_data = self.__parse(return_str)
         # Check if correct response is found...
@@ -315,7 +318,6 @@ class ApsYc600:
         print("Ping failed", cmd_output)
         return False
 
-    # pylint: disable=R0915
     def start_coordinator(self, pair_mode=False):
         '''
         Start coordinator proces in Zigbee radio.
@@ -409,6 +411,7 @@ class ApsYc600:
         pair_cmd += self.__reverse_byte_str(self.controller_id)
         init_cmd.append(pair_cmd)
 
+        found = False
         for cmd in init_cmd:
             self.__send_cmd(cmd)
             result_str = self.__listen(1100)
@@ -421,9 +424,16 @@ class ApsYc600:
             #    pass
             time.sleep(1.5)
             result = self.__parse(result_str)
-            print(result)
 
-        while inverter_serial in result_str:
-            result_str = result_str[
-                result_str.index(inverter_serial) + len(inverter_serial)]
-        return False
+            for result_obj in result:
+                if inverter_serial in result_obj['data']:
+                    inv_id_start = 12 + result_obj['data'].index(inverter_serial)
+                    inv_id = result_obj['data'][inv_id_start:inv_id_start+4]
+                    if inv_id not in ('0000', 'FFFF',
+                        self.__reverse_byte_str(self.controller_id)[-4:]):
+
+                        found = inv_id[2:]+inv_id[:2]
+                        print('Inverter ID Found',found)
+                        return found
+
+        return found
