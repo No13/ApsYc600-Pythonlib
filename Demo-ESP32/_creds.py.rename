@@ -1,0 +1,18 @@
+'''
+File containing all secret data
+'''
+secrets = {
+    'ssid': "mywifi",
+    'psk': 'secret',
+    'inv_serial': '408000123456',
+    'inv_id': '0000',
+    'graphite_host': '192.168.0.1',
+    'graphite_port': 2003,
+    'domoticz_url': 'http://domoticz.mydomain.tld:8080',
+    'domoticz_user': 'domo-user',
+    'domoticz_pass': '123secrets',
+    'influx_url': 'http://192.168.0.1:8086',
+    'influx_db': 'solar-db',
+    'influx_user': 'influx-user',
+    'influx_pass': '456secrets',
+    'influx_bucket': 'solar-data'}
