@@ -6,12 +6,13 @@ The current micropython version which I'm running on my ESP32 is 1.15.
 
 # Wiring
 The wiring is briefly mentioned in poll.py:
-    RX -> GPIO09
-    TX -> GPIO10
-    RST -> GPIO13
-
+```
+RX  -> GPIO09
+TX  -> GPIO10
+RST -> GPIO13
+```
 # Setup
-Copy the apsyc600.py file to this folder and fill _creds.py with actual
+Copy the aps_yc600.py file to this folder and fill _creds.py with actual
 values.
 
 # Not too pretty
