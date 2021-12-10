@@ -365,7 +365,7 @@ class ApsYc600:
             try:
                 if not expect_response[cmd_index][0] in result_str:
                     all_verified = False
-                    print('Verify failed',cmd,result_str)
+                    print('Verify failed', cmd, result_str)
             finally:
                 pass
             # Final commands need more time to process
@@ -395,7 +395,7 @@ class ApsYc600:
         if inverter_index > len(self.inv_data) -1:
             raise Exception('Invalid inverter')
         self.start_coordinator(True)
-        init_cmd =[]
+        init_cmd = []
         inverter_serial = self.inv_data[inverter_index]['serial']
         pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140D0200000F1100"
         pair_cmd += inverter_serial
@@ -432,11 +432,12 @@ class ApsYc600:
                 if inverter_serial in result_obj['data']:
                     inv_id_start = 12 + result_obj['data'].index(inverter_serial)
                     inv_id = result_obj['data'][inv_id_start:inv_id_start+4]
-                    if inv_id not in ('0000', 'FFFF',
-                        self.__reverse_byte_str(self.controller_id)[-4:]):
+                    if inv_id not in (
+                            '0000', 'FFFF',
+                            self.__reverse_byte_str(self.controller_id)[-4:]):
 
                         found = inv_id[2:]+inv_id[:2]
-                        print('Inverter ID Found',found)
+                        print('Inverter ID Found', found)
                         return found
 
         return found
