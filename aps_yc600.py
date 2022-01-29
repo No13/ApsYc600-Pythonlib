@@ -222,8 +222,8 @@ class ApsYc600:
         voltdc2 = (int('0x'+data[58:60], 0) * 16 + int('0x'+data[56], 0)) * (82.5 / 4096)
         volt_ac = (int('0x'+ data[60:64], 0) * (1 / 1.3277)) / 4
         # Energy counter (daily reset) for panel 1
-        en_pan1 = int('0x' + data[78:84], 0) * (8.311 / 3600)
-        en_pan2 = int('0x' + data[88:94], 0) * (8.311 / 3600)
+        en_pan2 = int('0x' + data[78:84], 0) * (8.311 / 3600)
+        en_pan1 = int('0x' + data[88:94], 0) * (8.311 / 3600)
         return {
             'temperature': round(invtemp, 2),
             'freq_ac': round(freq_ac, 2),
