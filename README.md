@@ -57,11 +57,14 @@ When paired once, the inverter ID should suffice for further communication.
 
 # Using a Raspberry PI
 ## Pairing
+    import time
     import serial
     import RPi.GPIO as GPIO
     from aps_yc600 import ApsYc600
 
     SER_PORT = serial.serial_for_url('/dev/ttyS0')
+    #  RPi pins for UART are GPIO 14,15
+   
     SER_PORT.baudrate = 115200
 
     RESET_PIN = 22
@@ -83,6 +86,7 @@ When paired once, the inverter ID should suffice for further communication.
     INDEX = INVERTER.add_inverter('123456789012', '0000', 2)
     print("Inverter ID is", INVERTER.pair_inverter(INDEX))
     # The inverter ID needs to be stored for future communications
+    GPIO.cleanup()
 
 ## Polling inverter
     import time
@@ -91,6 +95,7 @@ When paired once, the inverter ID should suffice for further communication.
     from aps_yc600 import ApsYc600
 
     SER_PORT = serial.serial_for_url('/dev/ttyS0')
+    #  RPi pins for UART are GPIO 14,15
     SER_PORT.baudrate = 115200
 
     RESET_PIN = 22
@@ -113,7 +118,7 @@ When paired once, the inverter ID should suffice for further communication.
     print(INVERTER.start_coordinator())
     print(INVERTER.ping_radio())
     print(INVERTER.poll_inverter(0))
-
+    GPIO.cleanup()
 
 # Using an ESP32
 ## Pairing
