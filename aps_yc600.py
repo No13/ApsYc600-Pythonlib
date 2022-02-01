@@ -25,6 +25,9 @@ class ApsYc600:
     writer = None
     system_type = None
 
+    # History data to detect inverter resets
+    energy_data = []
+
     ### Internal helper fuctions
 
     def __init__(self, reader, writer, controller_id='D8A3011B9780'):
@@ -155,7 +158,7 @@ class ApsYc600:
                 out_str += temp_char
         return out_str
 
-    def __decode(self, in_str):
+    def __decode(self, in_str, inverter_index):
         '''
         Decode message type, start decoding of received information
         Called by: parse
@@ -198,46 +201,77 @@ class ApsYc600:
                         pair = True
                         break
             else:
-                if not pair:
+                if not pair and (inverter_index >= 0):
                     # Decode inverter poll response
-                    data = self.__decode_inverter_values(in_str)
+                    data = self.__decode_inverter_values(in_str, inverter_index)
         return {'cmd': cmd_code, 'crc': crc, 'data': data}
 
-    @staticmethod
-    def __decode_inverter_values(in_str):
+    def __decode_inverter_values(self, in_str, inverter_index):
         '''
         Transform byte string of poll response to values
         called by: __decode
         '''
         # We do not need the first 38 bytes apparently
         data = in_str[38:]
-
+        voltdc = []
+        currdc = []
+        en_pan = []
+        num_panels = self.inv_data[inverter_index]['panels']
         invtemp = -258.7 + (int('0x' + data[24:28], 0) * 0.2752) # Inverter temperature
         freq_ac = 50000000 / int('0x' + data[28:34], 0) # AC Fequency
         # DC Current for panel 1
-        currdc1 = (int('0x'+data[48:50], 0) + (int('0x'+data[51], 0) * 256)) * (27.5 / 4096)
+        currdc.append((int('0x'+data[48:50], 0) + (int('0x'+data[51], 0) * 256)) * (27.5 / 4096))
         # DC Volts for panel 1
-        voltdc1 = (int('0x'+data[52:54], 0) * 16 + int('0x'+data[50], 0)) * (82.5 / 4096)
-        currdc2 = (int('0x'+data[54:56], 0) + (int('0x'+data[57], 0) * 256)) * (27.5 / 4096)
-        voltdc2 = (int('0x'+data[58:60], 0) * 16 + int('0x'+data[56], 0)) * (82.5 / 4096)
+        voltdc.append((int('0x'+data[52:54], 0) * 16 + int('0x'+data[50], 0)) * (82.5 / 4096))
+        currdc.append((int('0x'+data[54:56], 0) + (int('0x'+data[57], 0) * 256)) * (27.5 / 4096))
+        voltdc.append((int('0x'+data[58:60], 0) * 16 + int('0x'+data[56], 0)) * (82.5 / 4096))
         volt_ac = (int('0x'+ data[60:64], 0) * (1 / 1.3277)) / 4
-        # Energy counter (daily reset) for panel 1
-        en_pan2 = int('0x' + data[78:84], 0) * (8.311 / 3600)
-        en_pan1 = int('0x' + data[88:94], 0) * (8.311 / 3600)
+        # Energy counter (daily reset), swapped panel 1 and 2 as reported in
+        # https://github.com/No13/ApsYc600-Pythonlib/issues/1
+        en_pan.append(int('0x' + data[88:94], 0) * (8.311 / 3600))
+        en_pan.append(int('0x' + data[78:84], 0) * (8.311 / 3600))
+        if num_panels == 4:
+            currdc.append((int('0x'+data[34:36], 0) + (int('0x'+data[37], 0) * 256)) *(27.5 / 4096))
+            voltdc.append((int('0x'+data[38:40], 0) * 16 + int('0x'+data[36], 0)) * (82.5 / 4096))
+            currdc.append((int('0x'+data[28:30], 0) + (int('0x'+data[31], 0) * 256)) *(27.5 / 4096))
+            voltdc.append((int('0x'+data[32:34], 0) * 16 + int('0x'+data[30], 0)) * (82.5 / 4096))
+            en_pan.append(int('0x' + data[98:104], 0) * (8.311 / 3600))
+            en_pan.append(int('0x' + data[108:114], 0) * (8.311 / 3600))
+            return {
+                'temperature': round(invtemp, 2),
+                'freq_ac': round(freq_ac, 2),
+                'current_dc1': round(currdc[0], 2),
+                'current_dc2': round(currdc[1], 2),
+                'current_dc3': round(currdc[2], 2),
+                'current_dc4': round(currdc[3], 2),
+                'voltage_dc1': round(voltdc[0], 2),
+                'voltage_dc2': round(voltdc[1], 2),
+                'voltage_dc3': round(voltdc[2], 2),
+                'voltage_dc4': round(voltdc[3], 2),
+                'voltage_ac': round(volt_ac, 2),
+                'energy_panel1': round(en_pan[0], 3),
+                'energy_panel2': round(en_pan[1], 3),
+                'energy_panel3': round(en_pan[2], 3),
+                'energy_panel4': round(en_pan[3], 3),
+                'watt_panel1': round(currdc[0] * voltdc[0], 2),
+                'watt_panel2': round(currdc[1] * voltdc[1], 2),
+                'watt_panel3': round(currdc[2] * voltdc[2], 2),
+                'watt_panel4': round(currdc[3] * voltdc[3], 2)}
+
         return {
             'temperature': round(invtemp, 2),
             'freq_ac': round(freq_ac, 2),
-            'current_dc1': round(currdc1, 2),
-            'current_dc2': round(currdc2, 2),
-            'voltage_dc1': round(voltdc1, 2),
-            'voltage_dc2': round(voltdc2, 2),
+            'current_dc1': round(currdc[0], 2),
+            'current_dc2': round(currdc[1], 2),
+            'voltage_dc1': round(voltdc[0], 2),
+            'voltage_dc2': round(voltdc[1], 2),
             'voltage_ac': round(volt_ac, 2),
-            'energy_panel1': round(en_pan1, 3),
-            'energy_panel2': round(en_pan2, 3),
-            'watt_panel1': round(currdc1 * voltdc1, 2),
-            'watt_panel2': round(currdc2 * voltdc2, 2)}
+            'energy_panel1': round(en_pan[0], 3),
+            'energy_panel2': round(en_pan[1], 3),
+            'watt_panel1': round(currdc[0] * voltdc[0], 2),
+            'watt_panel2': round(currdc[1] * voltdc[1], 2)}
 
-    def __parse(self, in_str):
+    def __parse(self, in_str, inverter_index=-1):
         '''
         Parse incoming messages
             Split multiple messages, decode them and return the output
@@ -252,7 +286,7 @@ class ApsYc600:
                 raise Exception('Data corrupt, length field does not match actual length')
             cmd = in_str[:(10 + str_len * 2)] # Copy command to str
             in_str = in_str[10 + (str_len * 2):]
-            decoded_cmd.append(self.__decode(cmd))
+            decoded_cmd.append(self.__decode(cmd, inverter_index))
         return decoded_cmd
 
     # Public functions
@@ -264,12 +298,33 @@ class ApsYc600:
             serial is required for pairing
             num_panels is required to determine inverter type (YC600 / QS1)
         '''
+        if num_panels not in (2, 4):
+            raise Exception("Only 2 or 4 panels supported")
         inverter = {
             'serial': inv_serial,
             'inv_id': inv_id,
             'panels': num_panels}
         self.inv_data.append(inverter)
-        return len(self.inv_data) -1 # Return index for last inverter
+        inverter_index = len(self.inv_data) -1
+        if num_panels == 2:
+            self.energy_data.append(
+                {
+                    'last_energy_p1': 0,
+                    'last_energy_p2': 0,
+                    'energy_offset_p1': 0,
+                    'energy_offset_p2': 0})
+        else:
+            self.energy_data.append(
+                {
+                    'last_energy_p1': 0,
+                    'last_energy_p2': 0,
+                    'last_energy_p3': 0,
+                    'last_energy_p4': 0,
+                    'energy_offset_p1': 0,
+                    'energy_offset_p2': 0,
+                    'energy_offset_p3': 0,
+                    'energy_offset_p4': 0})
+        return inverter_index # Return index for last inverter
 
     def set_inverter_id(self, inv_index, inv_id):
         '''
@@ -280,13 +335,34 @@ class ApsYc600:
         self.inv_data[inv_index]['inv_id'] = inv_id
         return True
 
+    def reset_counters(self, inverter_index):
+        '''
+        Reset historical data
+        '''
+        self.energy_data[inverter_index] = {
+            'last_energy_p1': 0,
+            'last_energy_p2': 0,
+            'energy_offset_p1': 0,
+            'energy_offset_p2': 0}
+
     def poll_inverter(self, inverter_index):
         '''
-        Get values from inverter
+        Get values from inverter.
+
+        Uses previous values to determine inverter restarts.
+        In case of inverter restart the energy counters will continue (using offset)
+        instead of restarting from 0.
+
+        Note:
+         - This will require you to reset_counters every day (night) to begin a new day at 0.
+         - When this application restarts this history will be gone and only the last
+           energy value will be recorded
         '''
+        # Clear serial buffer
         self.clear_buffer()
         if inverter_index > len(self.inv_data) -1:
             raise Exception('Invalid inverter')
+        num_panels = self.inv_data[inverter_index]['panels']
         # Send poll request
         self.__send_cmd(
             '2401'+self.__reverse_byte_str(self.inv_data[inverter_index]['inv_id'])+
@@ -295,12 +371,71 @@ class ApsYc600:
         time.sleep(1)
         # Check poll response
         return_str = self.__listen()
-        response_data = self.__parse(return_str)
+        response_data = self.__parse(return_str, inverter_index)
         # Check if correct response is found...
         for response in response_data:
             if response['cmd'] == '4480' and 'CD' in response['data']:
                 return {'error': 'NoRoute'}
             if response['cmd'] == 'AF_INCOMING_MSG':
+                # Calculate energy
+                if not 'data' in response:
+                    return {'error': 'incomplete'}
+                if not 'energy_panel1' in response['data']:
+                    return {'error': 'incomplete', 'data': response}
+                # Retrieve last energy values
+                last_energy = self.energy_data[inverter_index]['last_energy_p1']
+                last_energy += self.energy_data[inverter_index]['last_energy_p2']
+                # Retrieve current energy values
+                curr_energy = response['data']['energy_panel1']
+                curr_energy += response['data']['energy_panel2']
+                # Retrieve offset energy
+                offset_energy = self.energy_data[inverter_index]['energy_offset_p1']
+                offset_energy += self.energy_data[inverter_index]['energy_offset_p2']
+                if num_panels == 4:
+                    last_energy += self.energy_data[inverter_index]['last_energy_p3']
+                    last_energy += self.energy_data[inverter_index]['last_energy_p4']
+                    curr_energy += response['data']['energy_panel3']
+                    curr_energy += response['data']['energy_panel4']
+                    offset_energy += self.energy_data[inverter_index]['energy_offset_p3']
+                    offset_energy += self.energy_data[inverter_index]['energy_offset_p4']
+                # If offset + current becomes smaller than last value then update offsets
+                if (curr_energy + offset_energy) < last_energy:
+                    # Reset of inverter: update offset
+                    new_offset = self.energy_data[inverter_index]['last_energy_p1']
+                    self.energy_data[inverter_index]['energy_offset_p1'] = new_offset
+                    new_offset = self.energy_data[inverter_index]['last_energy_p2']
+                    self.energy_data[inverter_index]['energy_offset_p2'] = new_offset
+                    if num_panels == 4:
+                        new_offset = self.energy_data[inverter_index]['last_energy_p3']
+                        self.energy_data[inverter_index]['energy_offset_p3'] = new_offset
+                        new_offset = self.energy_data[inverter_index]['last_energy_p4']
+                        self.energy_data[inverter_index]['energy_offset_p4'] = new_offset
+                # Return offset + current value & update last value
+                new_energy = self.energy_data[
+                    inverter_index]['energy_offset_p1'] + response['data']['energy_panel1']
+                self.energy_data[
+                    inverter_index]['last_energy_p1'] = new_energy
+                response['data']['energy_panel1'] = new_energy
+
+                new_energy = self.energy_data[
+                    inverter_index]['energy_offset_p2'] + response['data']['energy_panel2']
+                self.energy_data[
+                    inverter_index]['last_energy_p2'] = new_energy
+                response['data']['energy_panel2'] = new_energy
+
+                if num_panels == 4:
+                    new_energy = self.energy_data[
+                        inverter_index]['energy_offset_p3'] + response['data']['energy_panel3']
+                    self.energy_data[
+                        inverter_index]['last_energy_p3'] = new_energy
+                    response['data']['energy_panel3'] = new_energy
+
+                    new_energy = self.energy_data[
+                        inverter_index]['energy_offset_p4'] + response['data']['energy_panel4']
+                    self.energy_data[
+                        inverter_index]['last_energy_p4'] = new_energy
+                    response['data']['energy_panel4'] = new_energy
+
                 return response
         return {'error': 'timeout', 'data': response_data}
 
@@ -418,13 +553,7 @@ class ApsYc600:
         for cmd in init_cmd:
             self.__send_cmd(cmd)
             result_str = self.__listen(1100)
-            #cmd_index = init_cmd.index(cmd)
-            #try:
-            #    if not expect_response[cmd_index][0] in result_str:
-            #        all_verified = False
-            #        print('Verify failed',cmd,result_str)
-            #finally:
-            #    pass
+            # no check in place to verify responses from pair commands
             time.sleep(1.5)
             result = self.__parse(result_str)
 
