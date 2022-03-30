@@ -58,7 +58,7 @@ class ApsYc600:
             raise Exception('Input is not an even number of characters')
         out_str = ""
         for i in range(len(in_str), 1, -2):
-            out_str += in_str[i-2] + in_str[i-1]
+            out_str = ''.join((out_str, in_str[i-2], in_str[i-1]))
         return out_str
 
     @staticmethod
@@ -68,12 +68,12 @@ class ApsYc600:
         Input: string containing hex characters
         Output: hex value
         '''
+        if len(in_str) % 2 > 0:
+            raise Exception('Input is not an even number of characters')
         crc_res = 0
         for i in range(0, len(in_str), 2):
-            # Convert string to bytevalue
-            new_byte = '0x'+in_str[i]+in_str[i+1]
             # Calculate crc
-            crc_res = crc_res ^ int(new_byte, 0)
+            crc_res = crc_res ^ int(in_str[i:i+2], 16)
         # Return as hex value
         return hex(crc_res)
 
@@ -89,7 +89,7 @@ class ApsYc600:
         # Strip CRC and FE header
         data_check = in_str[2:][:-2]
         # Assemble CRC in message
-        crc_to_check = '0X'+in_str[-2:]
+        crc_to_check = ''.join(('0X', in_str[-2:]))
         # Calculate CRC For message
         crc_calc = str(self.__crc(data_check)).upper()
         # Return compare
@@ -105,12 +105,12 @@ class ApsYc600:
         cmdlen = hex(int(len(cmd) / 2) - 2)[2:]
         # Pad length to 2 bytes
         if len(cmdlen) == 1:
-            cmdlen = '0'+str(cmdlen)
+            cmdlen = ''.join(('0', str(cmdlen)))
         # Assemble and add CRC
-        cmd = prefix_cmd + cmdlen  + cmd + str(self.__crc(cmdlen+cmd))[2:]
+        cmd = ''.join((prefix_cmd, cmdlen, cmd, self.__crc(cmdlen+cmd)[2:]))
         # Send each set of two characters as byte
         for i in range(0, len(cmd), 2):
-            new_char = int('0x'+cmd[i]+cmd[i+1], 0).to_bytes(1, 'big')
+            new_char = int(cmd[i:i+2], 16).to_bytes(1, 'big')
             self.writer.write(new_char)
 
     def __listen(self, timeout=1000):
@@ -119,6 +119,7 @@ class ApsYc600:
         When serial buffer is empty after timeout, return ''
 
         When reader has no in_waiting function assume read() is non-blocking.
+        TODO: Convert str to bytearray
         '''
         out_str = ""
         # micropython has no float for time...
@@ -217,26 +218,26 @@ class ApsYc600:
         currdc = []
         en_pan = []
         num_panels = self.inv_data[inverter_index]['panels']
-        invtemp = -258.7 + (int('0x' + data[24:28], 0) * 0.2752) # Inverter temperature
-        freq_ac = 50000000 / int('0x' + data[28:34], 0) # AC Fequency
+        invtemp = -258.7 + (int(data[24:28], 16) * 0.2752) # Inverter temperature
+        freq_ac = 50000000 / int(data[28:34], 16) # AC Fequency
         # DC Current for panel 1
-        currdc.append((int('0x'+data[48:50], 0) + (int('0x'+data[51], 0) * 256)) * (27.5 / 4096))
+        currdc.append((int(data[48:50], 16) + (int(data[51], 16) * 256)) * (27.5 / 4096))
         # DC Volts for panel 1
-        voltdc.append((int('0x'+data[52:54], 0) * 16 + int('0x'+data[50], 0)) * (82.5 / 4096))
-        currdc.append((int('0x'+data[54:56], 0) + (int('0x'+data[57], 0) * 256)) * (27.5 / 4096))
-        voltdc.append((int('0x'+data[58:60], 0) * 16 + int('0x'+data[56], 0)) * (82.5 / 4096))
-        volt_ac = (int('0x'+ data[60:64], 0) * (1 / 1.3277)) / 4
+        voltdc.append((int(data[52:54], 16) * 16 + int(data[50], 16)) * (82.5 / 4096))
+        currdc.append((int(data[54:56], 16) + (int(data[57], 16) * 256)) * (27.5 / 4096))
+        voltdc.append((int(data[58:60], 16) * 16 + int(data[56], 16)) * (82.5 / 4096))
+        volt_ac = (int(data[60:64], 16) * (1 / 1.3277)) / 4
         # Energy counter (daily reset), swapped panel 1 and 2 as reported in
         # https://github.com/No13/ApsYc600-Pythonlib/issues/1
-        en_pan.append(int('0x' + data[88:94], 0) * (8.311 / 3600))
-        en_pan.append(int('0x' + data[78:84], 0) * (8.311 / 3600))
+        en_pan.append(int(data[88:94], 16) * (8.311 / 3600))
+        en_pan.append(int(data[78:84], 16) * (8.311 / 3600))
         if num_panels == 4:
-            currdc.append((int('0x'+data[34:36], 0) + (int('0x'+data[37], 0) * 256)) *(27.5 / 4096))
-            voltdc.append((int('0x'+data[38:40], 0) * 16 + int('0x'+data[36], 0)) * (82.5 / 4096))
-            currdc.append((int('0x'+data[28:30], 0) + (int('0x'+data[31], 0) * 256)) *(27.5 / 4096))
-            voltdc.append((int('0x'+data[32:34], 0) * 16 + int('0x'+data[30], 0)) * (82.5 / 4096))
-            en_pan.append(int('0x' + data[98:104], 0) * (8.311 / 3600))
-            en_pan.append(int('0x' + data[108:114], 0) * (8.311 / 3600))
+            currdc.append((int(data[34:36], 16) + (int(data[37], 16) * 256)) *(27.5 / 4096))
+            voltdc.append((int(data[38:40], 16) * 16 + int(data[36], 16)) * (82.5 / 4096))
+            currdc.append((int(data[28:30], 16) + (int(data[31], 16) * 256)) *(27.5 / 4096))
+            voltdc.append((int(data[32:34], 16) * 16 + int(data[30], 16)) * (82.5 / 4096))
+            en_pan.append(int(data[98:104], 16) * (8.311 / 3600))
+            en_pan.append(int(data[108:114], 16) * (8.311 / 3600))
             return {
                 'temperature': round(invtemp, 2),
                 'freq_ac': round(freq_ac, 2),
@@ -280,7 +281,7 @@ class ApsYc600:
         decoded_cmd = []
         while in_str[:2] == 'FE':
             # New command found
-            str_len = int('0x'+in_str[2:4], 0) # Decode cmd len
+            str_len = int(in_str[2:4], 16) # Decode cmd len
             min_len = int((len(in_str) - 10) / 2) # FE XX XXXX ... XX
             if str_len > min_len: # Check if data is sufficient for found str_len
                 raise Exception('Data corrupt, length field does not match actual length')
@@ -353,10 +354,7 @@ class ApsYc600:
         In case of inverter restart the energy counters will continue (using offset)
         instead of restarting from 0.
 
-        Note:
-         - This will require you to reset_counters every day (night) to begin a new day at 0.
-         - When this application restarts this history will be gone and only the last
-           energy value will be recorded
+        This will require you to reset_counters every day to begin a new day at 0.
         '''
         # Clear serial buffer
         self.clear_buffer()
@@ -364,10 +362,10 @@ class ApsYc600:
             raise Exception('Invalid inverter')
         num_panels = self.inv_data[inverter_index]['panels']
         # Send poll request
-        self.__send_cmd(
-            '2401'+self.__reverse_byte_str(self.inv_data[inverter_index]['inv_id'])+
-            '1414060001000F13'+self.__reverse_byte_str(self.controller_id)+
-            'FBFB06BB000000000000C1FEFE')
+        self.__send_cmd(''.join(
+            ('2401', self.__reverse_byte_str(self.inv_data[inverter_index]['inv_id']),
+             '1414060001000F13', self.__reverse_byte_str(self.controller_id),
+             'FBFB06BB000000000000C1FEFE')))
         time.sleep(1)
         # Check poll response
         return_str = self.__listen()
@@ -382,6 +380,8 @@ class ApsYc600:
                     return {'error': 'incomplete'}
                 if not 'energy_panel1' in response['data']:
                     return {'error': 'incomplete', 'data': response}
+                if response['data']['voltage_dc1'] + response['data']['voltage_dc2'] < 0.1:
+                    return {'error': 'data error', 'data': response}
                 # Retrieve last energy values
                 last_energy = self.energy_data[inverter_index]['last_energy_p1']
                 last_energy += self.energy_data[inverter_index]['last_energy_p2']
@@ -484,8 +484,9 @@ class ApsYc600:
         expect_response.append(['fe0e670000ffff'])
 
         if not pair_mode:
-            init_cmd.append('2401FFFF1414060001000F1E'+rev_controll_id+'FBFB11'+
-                            '00000D6030FBD3000000000000000004010281FEFE') # 20 ms
+            init_cmd.append(''.join(
+                ('2401FFFF1414060001000F1E', rev_controll_id, 'FBFB11',
+                 '00000D6030FBD3000000000000000004010281FEFE'))) # 20 ms
             expect_response.append(
                 ['fe0164010064',
                  'fe0145c0088c',
@@ -532,21 +533,24 @@ class ApsYc600:
         self.start_coordinator(True)
         init_cmd = []
         inverter_serial = self.inv_data[inverter_index]['serial']
-        pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140D0200000F1100"
-        pair_cmd += inverter_serial
-        pair_cmd += "FFFF10FFFF"
-        pair_cmd += self.__reverse_byte_str(self.controller_id)
+        pair_cmd = ''.join(
+            ("24020FFFFFFFFFFFFFFFFF14FFFF140D0200000F1100",
+             inverter_serial, "FFFF10FFFF",
+             self.__reverse_byte_str(self.controller_id)))
         init_cmd.append(pair_cmd)
-        pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140C0201000F0600"
-        pair_cmd += inverter_serial
+        pair_cmd = ''.join(
+            ("24020FFFFFFFFFFFFFFFFF14FFFF140C0201000F0600",
+             inverter_serial))
         init_cmd.append(pair_cmd)
-        pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF140F0102000F1100"
-        pair_cmd += inverter_serial
-        pair_cmd += self.__reverse_byte_str(self.controller_id)[-4:]
-        pair_cmd += "10FFFF" + self.__reverse_byte_str(self.controller_id)
+        pair_cmd = ''.join(
+            ("24020FFFFFFFFFFFFFFFFF14FFFF140F0102000F1100",
+             inverter_serial,
+             self.__reverse_byte_str(self.controller_id)[-4:],
+             "10FFFF", self.__reverse_byte_str(self.controller_id)))
         init_cmd.append(pair_cmd)
-        pair_cmd = "24020FFFFFFFFFFFFFFFFF14FFFF14010103000F0600"
-        pair_cmd += self.__reverse_byte_str(self.controller_id)
+        pair_cmd = ''.join(
+            ("24020FFFFFFFFFFFFFFFFF14FFFF14010103000F0600",
+             self.__reverse_byte_str(self.controller_id)))
         init_cmd.append(pair_cmd)
 
         found = False
